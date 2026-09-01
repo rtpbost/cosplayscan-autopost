@@ -1,18 +1,19 @@
 from database import get_random_post
+from platforms.telegram import send_album
 
 
 def main():
     post = get_random_post()
 
-    print("\n=== COSPLAYSCAN AUTOPOST TEST ===")
-    print("Album ID :", post["album_id"])
-    print("Title    :", post["title"])
-    print("Photos   :", post["photo_count"])
-    print("URL      :", post["album_url"])
+    print("Posting album:")
+    print("ID     :", post["album_id"])
+    print("Title  :", post["title"])
+    print("Photos :", post["photo_count"])
 
-    print("\n3 Preview:")
-    for i, url in enumerate(post["photos"], start=1):
-        print(f"{i}. {url}")
+    result = send_album(post)
+
+    print("Telegram sukses.")
+    print(result)
 
 
 if __name__ == "__main__":
