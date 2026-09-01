@@ -11,23 +11,26 @@ HEADERS = {
 
 if SUPABASE_KEY.startswith("eyJ"):
     HEADERS["Authorization"] = f"Bearer {SUPABASE_KEY}"
-}
 
 
-def supabase_get(table, params=None):
-    url = f"{SUPABASE_URL}/rest/v1/{table}"
-
+def supabase_get(table, params=None, extra_headers=None):
     headers = HEADERS.copy()
-    headers["Prefer"] = "count=exact"
+
+    if extra_headers:
+        headers.update(extra_headers)
 
     response = requests.get(
-        url,
+        f"{SUPABASE_URL}/rest/v1/{table}",
         headers=headers,
         params=params or {},
         timeout=30
     )
 
-    response.raise_for_status()
+    if not response.ok:
+        raise RuntimeError(
+            f"Supabase error {response.status_code}: {response.text}"
+        )
+
     return response
 
 
@@ -41,69 +44,74 @@ def get_posted_album_ids():
     )
 
     rows = response.json()
-    return {int(row["album_id"]) for row in rows}
+
+    return {
+        int(row["album_id"])
+        for row in rows
+        if row.get("album_id") is not None
+    }
 
 
-def get_random_album():
-    posted_ids = get_posted_album_ids()
-
-    # Ambil kandidat album secara acak dari beberapa halaman,
-    # supaya tidak perlu download 7200+ album setiap posting.
-    page_size = 100
-
-    # cari jumlah album
-    response = requests.get(
-        f"{SUPABASE_URL}/rest/v1/album",
-        headers={
-            **HEADERS,
-            "Prefer": "count=exact",
-            "Range": "0-0"
-        },
-        params={
+def get_album_count():
+    response = supabase_get(
+        "album",
+        {
             "select": "id"
         },
-        timeout=30
+        {
+            "Prefer": "count=exact",
+            "Range": "0-0"
+        }
     )
 
-    response.raise_for_status()
+    content_range = response.headers.get("Content-Range")
 
-    content_range = response.headers.get("Content-Range", "")
-    try:
-        total_albums = int(content_range.split("/")[-1])
-    except:
+    if not content_range or "/" not in content_range:
         raise RuntimeError(
             f"Gagal membaca jumlah album. Content-Range: {content_range}"
         )
 
-    if total_albums == 0:
+    total_text = content_range.split("/")[-1]
+
+    if total_text == "*":
+        raise RuntimeError("Supabase tidak mengembalikan total album.")
+
+    return int(total_text)
+
+
+def get_random_album():
+    posted_ids = get_posted_album_ids()
+    total_albums = get_album_count()
+
+    if total_albums <= 0:
         raise RuntimeError("Tabel album kosong.")
 
+    page_size = 100
     max_offset = max(0, total_albums - page_size)
 
-    for _ in range(20):
-
+    for _ in range(30):
         offset = random.randint(0, max_offset)
 
-        response = requests.get(
-            f"{SUPABASE_URL}/rest/v1/album",
-            headers={
-                **HEADERS,
-                "Range": f"{offset}-{offset + page_size - 1}"
-            },
-            params={
-                "select": "id,title,cosplayer_name,character_name,series_name",
-                "order": "id.asc"
-            },
-            timeout=30
+        response = supabase_get(
+            "album",
+            {
+                "select": (
+                    "id,title,cosplayer_name,"
+                    "character_name,series_name"
+                ),
+                "order": "id.asc",
+                "offset": offset,
+                "limit": page_size
+            }
         )
 
-        response.raise_for_status()
         albums = response.json()
 
         available = [
             album
             for album in albums
-            if int(album["id"]) not in posted_ids
+            if album.get("id") is not None
+            and int(album["id"]) not in posted_ids
         ]
 
         if available:
@@ -115,28 +123,24 @@ def get_random_album():
 
 
 def get_album_photos(album_id):
-    response = requests.get(
-        f"{SUPABASE_URL}/rest/v1/photo",
-        headers={
-            **HEADERS,
-            "Prefer": "count=exact"
-        },
-        params={
+    response = supabase_get(
+        "photo",
+        {
             "select": "id,image_url",
             "album_id": f"eq.{album_id}",
             "order": "id.asc"
-        },
-        timeout=30
+        }
     )
-
-    response.raise_for_status()
 
     photos = response.json()
 
-    if not photos:
-        return [], 0
+    photos = [
+        photo
+        for photo in photos
+        if photo.get("image_url")
+    ]
 
-    return photos, len(photos)
+    return photos
 
 
 def select_three_photos(photos):
@@ -145,13 +149,10 @@ def select_three_photos(photos):
     if total == 0:
         return []
 
-    if total == 1:
-        return [photos[0]["image_url"]]
-
-    if total == 2:
+    if total <= 3:
         return [
-            photos[0]["image_url"],
-            photos[1]["image_url"]
+            photo["image_url"]
+            for photo in photos
         ]
 
     indexes = [
@@ -161,17 +162,17 @@ def select_three_photos(photos):
     ]
 
     return [
-        photos[i]["image_url"]
-        for i in indexes
+        photos[index]["image_url"]
+        for index in indexes
     ]
 
 
 def get_random_post():
-    for _ in range(20):
-
+    for _ in range(30):
         album = get_random_album()
 
-        photos, photo_count = get_album_photos(album["id"])
+        photos = get_album_photos(album["id"])
+        photo_count = len(photos)
 
         if photo_count == 0:
             continue
@@ -184,15 +185,13 @@ def get_random_post():
             "cosplayer_name": album.get("cosplayer_name"),
             "character_name": album.get("character_name"),
             "series_name": album.get("series_name"),
-
             "photo_count": photo_count,
             "photos": selected_photos,
-
             "album_url": (
                 f"https://cosplayscan.asia/album/{album['id']}"
             )
         }
 
     raise RuntimeError(
-        "Tidak menemukan album valid dengan foto."
-            )
+        "Tidak menemukan album valid yang memiliki foto."
+    )
