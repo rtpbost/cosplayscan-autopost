@@ -6,8 +6,11 @@ SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 
 HEADERS = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "apikey": SUPABASE_KEY
+}
+
+if SUPABASE_KEY.startswith("eyJ"):
+    HEADERS["Authorization"] = f"Bearer {SUPABASE_KEY}"
 }
 
 
