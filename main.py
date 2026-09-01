@@ -2,10 +2,16 @@ from database import (
     get_random_post,
     get_log,
     ensure_log,
-    mark_telegram_posted
+    mark_telegram_posted,
+    mark_whatsapp_posted
 )
 
-from platforms.telegram import send_album
+from platforms.telegram import send_album as send_telegram
+from platforms.whatsapp import (
+    send_album as send_whatsapp,
+    is_enabled as whatsapp_enabled
+)
+
 from scheduler import run_scheduler
 
 
@@ -15,7 +21,6 @@ def post_once():
     print("==============================")
 
     post = get_random_post()
-
     album_id = post["album_id"]
 
     print("Album ID :", album_id)
@@ -24,28 +29,45 @@ def post_once():
     print("URL      :", post["album_url"])
 
     ensure_log(album_id)
-
     log = get_log(album_id)
 
+    # TELEGRAM
     if log and log.get("telegram_posted"):
         print("Telegram sudah pernah dipost.")
-        return
+    else:
+        print("Mengirim ke Telegram...")
 
-    print("Mengirim ke Telegram...")
+        result = send_telegram(post)
 
-    result = send_album(post)
+        if result["success"]:
+            mark_telegram_posted(
+                album_id,
+                result.get("message_id")
+            )
 
-    if result["success"]:
-        mark_telegram_posted(
-            album_id,
-            result.get("message_id")
-        )
+            print("Telegram sukses.")
 
-        print("Telegram sukses.")
-        print(
-            "Message ID:",
-            result.get("message_id")
-        )
+    # WHATSAPP
+    log = get_log(album_id)
+
+    if not whatsapp_enabled():
+        print("WhatsApp disabled.")
+
+    elif log and log.get("whatsapp_posted"):
+        print("WhatsApp sudah pernah dipost.")
+
+    else:
+        print("Mengirim ke WhatsApp Channel...")
+
+        result = send_whatsapp(post)
+
+        if result["success"]:
+            mark_whatsapp_posted(
+                album_id,
+                result.get("post_id")
+            )
+
+            print("WhatsApp sukses.")
 
 
 def main():
