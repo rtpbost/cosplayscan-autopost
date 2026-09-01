@@ -1,35 +1,29 @@
 import os
 import requests
 
+from formatter import build_caption
+
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHANNEL_ID = os.environ["TELEGRAM_CHANNEL_ID"]
 
 API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 
-def build_caption(post):
-    return (
-        f"{post['title']}\n"
-        f"📸 {post['photo_count']} Photos\n\n"
-        f"{post['album_url']}"
-    )
-
-
 def send_album(post):
     photos = post["photos"]
 
     if not photos:
-        raise RuntimeError("Album tidak memiliki foto.")
+        raise RuntimeError("Tidak ada foto untuk Telegram.")
 
     media = []
 
-    for i, url in enumerate(photos):
+    for index, photo_url in enumerate(photos):
         item = {
             "type": "photo",
-            "media": url
+            "media": photo_url
         }
 
-        if i == 0:
+        if index == 0:
             item["caption"] = build_caption(post)
 
         media.append(item)
@@ -45,7 +39,26 @@ def send_album(post):
 
     if not response.ok:
         raise RuntimeError(
-            f"Telegram error {response.status_code}: {response.text}"
+            f"Telegram error "
+            f"{response.status_code}: {response.text}"
         )
 
-    return response.json()
+    result = response.json()
+
+    if not result.get("ok"):
+        raise RuntimeError(
+            f"Telegram API gagal: {result}"
+        )
+
+    messages = result.get("result", [])
+
+    message_id = None
+
+    if messages:
+        message_id = messages[0].get("message_id")
+
+    return {
+        "success": True,
+        "message_id": message_id,
+        "raw": result
+    }
