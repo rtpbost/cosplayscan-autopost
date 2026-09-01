@@ -2,8 +2,8 @@ import os
 import random
 import requests
 
-SUPABASE_URL = os.environ["https://muypfxdwveymqeaabhex.supabase.co"].rstrip("/")
-SUPABASE_KEY = os.environ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11eXBmeGR3dmV5bXFlYWFiaGV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2NDU4NDUsImV4cCI6MjEwMzIyMTg0NX0.AgoZiOWBzZgF6nM2BWUZs3poQ-SkHOsdTFoW0NCaiEs"]
+SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
+SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -192,4 +192,4 @@ def get_random_post():
 
     raise RuntimeError(
         "Tidak menemukan album valid dengan foto."
-      )
+            )
